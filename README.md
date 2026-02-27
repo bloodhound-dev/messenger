@@ -98,3 +98,12 @@ Run locally:
 python -m http.server 4173 -d web
 # open http://localhost:4173
 ```
+
+
+## Deploy on Vercel
+
+- Deployment instructions are in `DEPLOYMENT.md`.
+- This repo includes `vercel.json` with:
+  - route rewrites from `/` to `web/index.html`
+  - static asset routes for `app.js` and `styles.css`
+  - baseline security headers (CSP, X-Frame-Options, etc.)
