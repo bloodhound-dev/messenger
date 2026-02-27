@@ -69,3 +69,14 @@ jobs:
 - Signature integrity: tamper with a stored message envelope and confirm it is rejected on decrypt.
 - AAD integrity: alter sender/recipient metadata and confirm AES.GCM auth failure.
 - Key-at-rest: confirm private keys are retrieved from Keychain and not stored in JSON files.
+
+
+## 6) Web app test run
+
+- Start web app: `python -m http.server 4173 -d web`
+- Open `http://localhost:4173`
+- Validate:
+  - MFA login flow works
+  - Send/receive encrypted messages in chat
+  - Dashboard counters update after sending messages
+  - Region map renders user-count markers

@@ -81,3 +81,20 @@ ios/SecureMessenger/
 - Replace this simplified protocol with a formally reviewed protocol (Signal double ratchet + prekeys).
 - Add secure push transport, certificate pinning, anti-abuse controls, and server-assisted device revocation.
 - Integrate App Attest / DeviceCheck and hardened jailbreak/tamper detection as needed for your threat model.
+
+
+## Web application
+
+A web version is available in `web/` with:
+- Mobile-number login + OTP MFA
+- Local-only persistence (`localStorage`)
+- P2P encrypted messaging using WebCrypto (ECDH + AES-GCM)
+- Message signatures using WebCrypto ECDSA
+- Dashboard with traffic/usage/telemetry and region map
+
+Run locally:
+
+```bash
+python -m http.server 4173 -d web
+# open http://localhost:4173
+```
