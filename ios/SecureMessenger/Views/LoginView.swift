@@ -13,7 +13,12 @@ struct LoginView: View {
                 .fontWeight(.bold)
 
             switch viewModel.authState {
-            case .loggedOut:
+            case .loggedOut(let error):
+                if let error {
+                    Text(error)
+                        .foregroundStyle(.red)
+                }
+
                 TextField("Mobile number", text: $phoneNumber)
                     .textFieldStyle(.roundedBorder)
                     .keyboardType(.phonePad)

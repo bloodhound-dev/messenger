@@ -10,9 +10,12 @@ final class MessengerRepository: ObservableObject {
 
     private var userPrivateKeys: [UUID: Data] = [:]
     private var userPublicKeys: [UUID: Data] = [:]
+    private var userSigningPrivateKeys: [UUID: Data] = [:]
+    private var userSigningPublicKeys: [UUID: Data] = [:]
 
     private let fileStore = LocalFileStore.shared
     private let crypto = CryptoService.shared
+    private let keychain = KeychainService.shared
 
     private init() {
         load()
@@ -24,9 +27,18 @@ final class MessengerRepository: ObservableObject {
     func createUser(phoneNumber: String, name: String, region: String) -> AppUser {
         let user = AppUser(id: UUID(), phoneNumber: phoneNumber, displayName: name, region: region)
         users.append(user)
-        let privateKey = crypto.makeIdentityPrivateKey()
-        userPrivateKeys[user.id] = privateKey
-        userPublicKeys[user.id] = try? crypto.derivePublicKey(from: privateKey)
+
+        let kaPrivate = crypto.makeIdentityPrivateKey()
+        let sigPrivate = crypto.makeSigningPrivateKey()
+        userPrivateKeys[user.id] = kaPrivate
+        userSigningPrivateKeys[user.id] = sigPrivate
+
+        userPublicKeys[user.id] = try? crypto.derivePublicKey(from: kaPrivate)
+        userSigningPublicKeys[user.id] = try? crypto.deriveSigningPublicKey(from: sigPrivate)
+
+        try? keychain.set(kaPrivate, account: "ka-private-\(user.id.uuidString)")
+        try? keychain.set(sigPrivate, account: "sig-private-\(user.id.uuidString)")
+
         save()
         return user
     }
@@ -44,24 +56,32 @@ final class MessengerRepository: ObservableObject {
     func sendMessage(chatID: UUID, senderID: UUID, recipientID: UUID, plaintext: String) throws {
         guard
             let senderPrivate = userPrivateKeys[senderID],
-            let recipientPublic = userPublicKeys[recipientID]
+            let recipientPublic = userPublicKeys[recipientID],
+            let senderSigningPrivate = userSigningPrivateKeys[senderID],
+            let senderSigningPublic = userSigningPublicKeys[senderID]
         else { return }
 
-        let symmetricKey = try crypto.deriveSharedSecret(
-            ownPrivateKeyData: senderPrivate,
-            peerPublicKeyData: recipientPublic
-        )
+        let symmetricKey = try crypto.deriveSharedSecret(ownPrivateKeyData: senderPrivate, peerPublicKeyData: recipientPublic)
+        let aad = makeAAD(chatID: chatID, senderID: senderID, recipientID: recipientID)
+        let encrypted = try crypto.encrypt(plaintext, using: symmetricKey, authenticatedContext: aad)
 
-        let encrypted = try crypto.encrypt(plaintext, using: symmetricKey)
+        let sentAt = Date()
+        let toSign = signablePayload(chatID: chatID, senderID: senderID, recipientID: recipientID, sentAt: sentAt, encryptedPayload: encrypted.payload)
+        let signature = try crypto.sign(toSign, signingPrivateKey: senderSigningPrivate)
+
         let envelope = MessageEnvelope(
             id: UUID(),
             chatID: chatID,
             senderID: senderID,
             recipientID: recipientID,
+            protocolVersion: 1,
+            senderSigningPublicKey: senderSigningPublic,
             encryptedPayload: encrypted.payload,
             nonce: encrypted.nonce,
-            sentAt: Date()
+            sentAt: sentAt,
+            signature: signature
         )
+
         messages.append(envelope)
 
         if let index = chats.firstIndex(where: { $0.id == chatID }) {
@@ -82,18 +102,23 @@ final class MessengerRepository: ObservableObject {
                         let peerPublic = userPublicKeys[peerID]
                     else { return nil }
 
-                    let symmetricKey = try crypto.deriveSharedSecret(
-                        ownPrivateKeyData: ownPrivate,
-                        peerPublicKeyData: peerPublic
-                    )
-                    let text = try crypto.decrypt(payload: envelope.encryptedPayload, using: symmetricKey)
-                    return DecryptedMessage(
-                        id: envelope.id,
+                    let signedPayload = signablePayload(
                         chatID: envelope.chatID,
                         senderID: envelope.senderID,
-                        text: text,
-                        sentAt: envelope.sentAt
+                        recipientID: envelope.recipientID,
+                        sentAt: envelope.sentAt,
+                        encryptedPayload: envelope.encryptedPayload
                     )
+
+                    guard crypto.verify(signature: envelope.signature, payload: signedPayload, signerPublicKey: envelope.senderSigningPublicKey) else {
+                        return nil
+                    }
+
+                    let symmetricKey = try crypto.deriveSharedSecret(ownPrivateKeyData: ownPrivate, peerPublicKeyData: peerPublic)
+                    let aad = makeAAD(chatID: envelope.chatID, senderID: envelope.senderID, recipientID: envelope.recipientID)
+                    let text = try crypto.decrypt(payload: envelope.encryptedPayload, using: symmetricKey, authenticatedContext: aad)
+
+                    return DecryptedMessage(id: envelope.id, chatID: envelope.chatID, senderID: envelope.senderID, text: text, sentAt: envelope.sentAt)
                 } catch {
                     return nil
                 }
@@ -105,12 +130,33 @@ final class MessengerRepository: ObservableObject {
         users = (try? fileStore.read([AppUser].self, from: "users.json")) ?? []
         chats = (try? fileStore.read([ChatThread].self, from: "chats.json")) ?? []
         messages = (try? fileStore.read([MessageEnvelope].self, from: "messages.json")) ?? []
+
+        for user in users {
+            if let ka = try? keychain.get(account: "ka-private-\(user.id.uuidString)") {
+                userPrivateKeys[user.id] = ka
+                userPublicKeys[user.id] = try? crypto.derivePublicKey(from: ka)
+            }
+            if let sig = try? keychain.get(account: "sig-private-\(user.id.uuidString)") {
+                userSigningPrivateKeys[user.id] = sig
+                userSigningPublicKeys[user.id] = try? crypto.deriveSigningPublicKey(from: sig)
+            }
+        }
     }
 
     private func save() {
         try? fileStore.write(users, to: "users.json")
         try? fileStore.write(chats, to: "chats.json")
         try? fileStore.write(messages, to: "messages.json")
+    }
+
+    private func makeAAD(chatID: UUID, senderID: UUID, recipientID: UUID) -> Data {
+        Data("\(chatID.uuidString)|\(senderID.uuidString)|\(recipientID.uuidString)|v1".utf8)
+    }
+
+    private func signablePayload(chatID: UUID, senderID: UUID, recipientID: UUID, sentAt: Date, encryptedPayload: Data) -> Data {
+        var payload = Data("\(chatID.uuidString)|\(senderID.uuidString)|\(recipientID.uuidString)|\(sentAt.timeIntervalSince1970)|v1".utf8)
+        payload.append(encryptedPayload)
+        return payload
     }
 
     private func seedSampleUsers() {

@@ -7,8 +7,9 @@ final class AuthServiceTests: XCTestCase {
         let phone = "+14155550111"
 
         let otp = sut.requestOTP(for: phone)
-        let result = sut.verifyOTP(phoneNumber: phone, code: otp)
+        let result = sut.verifyOTP(phoneNumber: phone, code: otp ?? "")
 
+        XCTAssertNotNil(otp)
         XCTAssertTrue(result)
     }
 
@@ -27,9 +28,10 @@ final class AuthServiceTests: XCTestCase {
         let phone = "+14155550113"
 
         let otp = sut.requestOTP(for: phone)
-        let first = sut.verifyOTP(phoneNumber: phone, code: otp)
-        let second = sut.verifyOTP(phoneNumber: phone, code: otp)
+        let first = sut.verifyOTP(phoneNumber: phone, code: otp ?? "")
+        let second = sut.verifyOTP(phoneNumber: phone, code: otp ?? "")
 
+        XCTAssertNotNil(otp)
         XCTAssertTrue(first)
         XCTAssertFalse(second)
     }

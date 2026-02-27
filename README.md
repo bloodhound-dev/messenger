@@ -66,3 +66,18 @@ ios/SecureMessenger/
 - A test guide is provided in `TESTING.md`.
 - Unit test source files are provided under `ios/SecureMessengerTests/` for Xcode test targets.
 - Run on macOS/iOS simulator using `xcodebuild test` (see guide for command).
+
+
+## Security hardening included
+
+- OTP values are hashed in-memory and compared with a constant-time function.
+- OTP expiration, max-attempt limits, and temporary lockout are enforced.
+- Long-term private keys are stored in iOS Keychain (`kSecAttrAccessibleWhenUnlockedThisDeviceOnly`) rather than persisted in plaintext files.
+- Message ciphertext uses AES.GCM with additional authenticated data (AAD) to bind chat/sender/recipient metadata.
+- Messages are signed with Ed25519 (`Curve25519.Signing`) and verified before decryption.
+
+## Important production recommendations
+
+- Replace this simplified protocol with a formally reviewed protocol (Signal double ratchet + prekeys).
+- Add secure push transport, certificate pinning, anti-abuse controls, and server-assisted device revocation.
+- Integrate App Attest / DeviceCheck and hardened jailbreak/tamper detection as needed for your threat model.

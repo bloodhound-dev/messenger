@@ -60,3 +60,12 @@ jobs:
           -destination 'platform=iOS Simulator,name=iPhone 15'
 ```
 
+
+
+## 5) Security validation checklist
+
+- OTP lockout: submit invalid OTP 5 times and confirm further OTP requests are blocked temporarily.
+- OTP expiry: verify code fails after expiration window.
+- Signature integrity: tamper with a stored message envelope and confirm it is rejected on decrypt.
+- AAD integrity: alter sender/recipient metadata and confirm AES.GCM auth failure.
+- Key-at-rest: confirm private keys are retrieved from Keychain and not stored in JSON files.

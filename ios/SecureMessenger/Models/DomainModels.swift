@@ -20,9 +20,12 @@ struct MessageEnvelope: Codable, Identifiable, Hashable {
     let chatID: UUID
     let senderID: UUID
     let recipientID: UUID
+    let protocolVersion: Int
+    let senderSigningPublicKey: Data
     let encryptedPayload: Data
     let nonce: Data
     let sentAt: Date
+    let signature: Data
 }
 
 struct DecryptedMessage: Identifiable, Hashable {
