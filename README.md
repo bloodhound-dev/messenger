@@ -60,3 +60,9 @@ ios/SecureMessenger/
 - OTP service is simulated to keep all data local.
 - Map data is local sample telemetry points.
 - Replace local repositories with secure app-group or encrypted database if needed.
+
+## Testing
+
+- A test guide is provided in `TESTING.md`.
+- Unit test source files are provided under `ios/SecureMessengerTests/` for Xcode test targets.
+- Run on macOS/iOS simulator using `xcodebuild test` (see guide for command).
